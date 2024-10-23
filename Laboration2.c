@@ -1,11 +1,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 
 #define nbrframes 256
 
 //Adrian Stude och Mohamad Muhra
-
 
 /*
 Krav i uppgift:
@@ -29,8 +29,8 @@ sist ska en summering skrivas ut
 Storlekar:
     storlek på vr minne = 64Kb
     16 bit adresser(0x0000-0xffff)
-    frame size 256 bytes
-    physical memory = <frames> x 256 bytes
+    frame size nbrframes bytes
+    physical memory = <frames> x nbrframes bytes
 
 */
 
@@ -92,17 +92,25 @@ void fifo(vsim *sim, int page) {
     /*
     hantering av first in first out
     */
-
     static int nextFrame = 0;
-    //cirkulär fifo
-    if(!pageHitorMiss(sim,page)) {
-        sim -> pageFaults++;
-        sim -> pMemory[nextFrame] = page;
-        nextFrame = (nextFrame + 1) % sim -> nbrFrames;
-        sim ->pageChange++;
-    } else {
+    
+    //om sidträff
+    if(pageHitorMiss(sim,page)) {
         sim -> pageHits++;
+        return;
+    } 
+    sim -> pageFaults++;
+
+    for(int i = 0; i < sim -> nbrFrames;i++) {
+        if(sim ->pMemory[i] == -1) {
+            sim -> pMemory[i] = page;
+            return;
+        }
     }
+    //cirkulär fifo, sidbyte sker vid fulla ramar
+    sim -> pMemory[nextFrame] = page;
+    nextFrame = (nextFrame + 1) % sim -> nbrFrames; 
+    sim ->pageChange++;
 }
 
 void upt(vsim *sim, int page, int* adresses, int currentIndex, int nbrAdresses) {
@@ -118,7 +126,7 @@ void upt(vsim *sim, int page, int* adresses, int currentIndex, int nbrAdresses) 
     for (int i = 0; i < sim -> nbrFrames; i++) {
         if (sim -> pMemory[i] == -1) {
             sim -> pMemory[i] = page;
-            sim -> pageChange++;
+            //sim -> pageChange++;
             return;
         }
     }
@@ -150,25 +158,37 @@ void lru(vsim *sim,int page) {
     /*
     least read ues time eller nått, senast läst nyligen bort först
     */
-
-    int leastUsed = sim -> currentTime + 1;
+    int leastUsed = INT_MAX;
     int lUsedIndex = -1;
     
     for(int i = 0; i < sim -> nbrFrames;i++) {
        if(sim ->pMemory[i] == page) {
-           sim ->pageHits++;
            sim ->pageTable[i] = sim ->currentTime++;
+           sim ->pageHits++;
            return;
-       }
+       }  
+    }
+    sim -> pageFaults++;
+
+    for(int i = 0; i < sim -> nbrFrames;i++) {
+       if(sim ->pMemory[i] == -1) {
+           sim ->pMemory[i] = page;
+           sim ->pageTable[i] = sim -> currentTime++;
+           return;
+       }  
+    }
+    
+    for(int i = 0; i < sim -> nbrFrames;i++) {
         if(sim -> pageTable[i] < leastUsed) {
             leastUsed = sim -> pageTable[i];
             lUsedIndex = i;
         }
     }
-    sim -> pageFaults++;
-    sim -> pMemory[lUsedIndex] = page;
-    sim -> pageTable[lUsedIndex] = sim -> currentTime++;  
-    sim -> pageChange++;
+    if(lUsedIndex != -1) {
+        sim -> pMemory[lUsedIndex] = page;
+        sim -> pageTable[lUsedIndex] = sim -> currentTime++;  
+        sim -> pageChange++;
+    }
 }
 
 //för att kunna läsa antalet adresser i filen som används
@@ -180,7 +200,7 @@ int countLines(const char *filename) {
     }
 
     int count = 0;
-    char line[256]; 
+    char line[nbrframes]; 
 
     // Läs filen rad för rad
     while (fgets(line, sizeof(line), file) != NULL) {
@@ -202,24 +222,21 @@ int* readFile(const char* filename,int* nbrAdresses) {
         exit(0);
     }
 
-    char line[256];
+    char line[nbrframes];
     int count = 0;
     
-    //hantering av filadresser
-    //konvertera om hexa till heltal
+    //konvetering från hexa till heltal
     while (fgets(line, sizeof(line), file) != NULL) {
-        // Ta bort eventuella newline-tecken
         line[strcspn(line, "\n")] = 0;
 
-        // Konvertera hex-sträng till int
         int adress;
         if (sscanf(line, "%x", &adress) == 1) {
-            adress = adress / 256;  // Omvandla adress till sidnummer
+            adress = adress / nbrframes; 
             adresses[count] = adress;
-            printf("Läst adress: 0x%x -> Sida: %d\n", adress * 256, adress);  // Utskrift för felsökning
+            printf("Läst adress: 0x%x -> Sida: %d\n", adress * nbrframes, adress);  
             count++;
         } else {
-            printf("Ogiltig adress: %s\n", line); // Hantera ogiltiga adresser
+            printf("Ogiltig adress: %s\n", line);
         }
     }
 
@@ -292,15 +309,15 @@ int main(int args, char *argc[]) {
     //initering av simulator
     vsim *sim = create_sim(algo, nbrFrames);
 
-    // Läs fil och adresser
+    //Läs fil och adresser
     int nbrAdresses;
     int* adresses = readFile(filename, &nbrAdresses);
 
-    // Simulering
+    //Simulering
     for (int i = 0; i < nbrAdresses; i++) {
         simulation(sim, adresses[i],adresses, i, nbrAdresses);
     }
-    // Summering
+    //Summering
     summary(sim);
 
     //frigör upp alla adresser för å kunna reset:a
