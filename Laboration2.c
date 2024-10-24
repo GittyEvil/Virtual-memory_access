@@ -101,6 +101,7 @@ void fifo(vsim *sim, int page) {
     } 
     sim -> pageFaults++;
 
+    //om sida var tom så läggs in en ny adress
     for(int i = 0; i < sim -> nbrFrames;i++) {
         if(sim ->pMemory[i] == -1) {
             sim -> pMemory[i] = page;
@@ -123,6 +124,7 @@ void upt(vsim *sim, int page, int* adresses, int currentIndex, int nbrAdresses) 
     }
     sim -> pageFaults++;
 
+    //om tom lägg till adress i minne
     for (int i = 0; i < sim -> nbrFrames; i++) {
         if (sim -> pMemory[i] == -1) {
             sim -> pMemory[i] = page;
@@ -134,6 +136,7 @@ void upt(vsim *sim, int page, int* adresses, int currentIndex, int nbrAdresses) 
     int furthest = -1;
     int replaceIndex = -1;
 
+    //de som är använt senast byts sedan ut eller inte använd alls
     for (int i = 0; i < sim -> nbrFrames; i++) {
         int j;
         for (j = currentIndex + 1; j < nbrAdresses; j++) {
@@ -150,6 +153,7 @@ void upt(vsim *sim, int page, int* adresses, int currentIndex, int nbrAdresses) 
             break;
         }
     }
+    //byter ut adress och ökar sidbyte
     sim -> pMemory[replaceIndex] = page;
     sim -> pageChange++;
 }
@@ -160,7 +164,8 @@ void lru(vsim *sim,int page) {
     */
     int leastUsed = INT_MAX;
     int lUsedIndex = -1;
-    
+
+    //checkar alla adresser i minne och ökar tiden de varit använda
     for(int i = 0; i < sim -> nbrFrames;i++) {
        if(sim ->pMemory[i] == page) {
            sim ->pageTable[i] = sim ->currentTime++;
@@ -169,7 +174,7 @@ void lru(vsim *sim,int page) {
        }  
     }
     sim -> pageFaults++;
-
+    //om tom lägg in och öka tiden för addresen
     for(int i = 0; i < sim -> nbrFrames;i++) {
        if(sim ->pMemory[i] == -1) {
            sim ->pMemory[i] = page;
@@ -177,13 +182,14 @@ void lru(vsim *sim,int page) {
            return;
        }  
     }
-    
+    //lägger in adress som är använd minst för att sen byta ut
     for(int i = 0; i < sim -> nbrFrames;i++) {
         if(sim -> pageTable[i] < leastUsed) {
             leastUsed = sim -> pageTable[i];
             lUsedIndex = i;
         }
     }
+    //byter ut om allt gått rätt
     if(lUsedIndex != -1) {
         sim -> pMemory[lUsedIndex] = page;
         sim -> pageTable[lUsedIndex] = sim -> currentTime++;  
@@ -227,13 +233,13 @@ int* readFile(const char* filename,int* nbrAdresses) {
     
     //konvetering från hexa till heltal
     while (fgets(line, sizeof(line), file) != NULL) {
-        line[strcspn(line, "\n")] = 0;
-
+        //konverting av hex till heltal
         int adress;
         if (sscanf(line, "%x", &adress) == 1) {
+            //delar adress mha ramarna(sidstorleken)
             adress = adress / nbrframes; 
             adresses[count] = adress;
-            printf("Läst adress: 0x%x -> Sida: %d\n", adress * nbrframes, adress);  
+            printf("Läst address: 0x%x -> Sida: %d\n", adress * nbrframes, adress);  
             count++;
         } else {
             printf("Ogiltig adress: %s\n", line);
@@ -261,8 +267,7 @@ vsim simulation(vsim *sim, int address,int* adresses,int currentIndex, int nbrAd
             break;
         default:
             printf("hittar inte algoritm");
-            exit(1);
-        
+            exit(1); 
     }
 }
 
@@ -274,6 +279,7 @@ void summary(vsim *sim) {
 }
 
 int main(int args, char *argc[]) {
+    //ser till att kommandot skrivs in rätt
     if (args < 5) {
         printf("kommando: vmsim -a <fifo | upt | lru> -n <number of frames> -f <trace file>\n");
         return 1;
@@ -283,6 +289,7 @@ int main(int args, char *argc[]) {
     int algo = -1;
     int nbrFrames = -1;
     
+    //checkar input användare ger i kommandot vid körning
     for (int i = 1; i < args; i++) {
         if (strcmp(argc[i], "-a") == 0) {
             if (strcmp(argc[i + 1], "fifo") == 0) {
